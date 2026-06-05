@@ -33,7 +33,16 @@ asyncHTTPrequest::asyncHTTPrequest()
 
 //**************************************************************************************************************
 asyncHTTPrequest::~asyncHTTPrequest(){
-    if(_client) _client->close(true);
+    if(_client){
+        _client->close(true);
+        // close(true) on a connected client fires onDisconnect synchronously,
+        // which deletes _client and nulls the member, so this delete sees
+        // nullptr. A client that never reached connected state (synchronous
+        // connect() failure) has no disconnect event and must be freed here
+        // or it leaks on every open-retry cycle.
+        delete _client;
+        _client = nullptr;
+    }
     delete _URL;
     delete _headers;
     delete _request;
