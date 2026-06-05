@@ -89,8 +89,13 @@ bool	asyncHTTPrequest::open(const char* method, const char* URL){
         return false;}
     if( _client && _client->connected() && 
       (strcmp(_URL->host, _connectedHost) != 0 || _URL->port != _connectedPort)){return false;}
-    char* hostName = new char[strlen(_URL->host)+10];
-    sprintf(hostName,"%s:%d", _URL->host, _URL->port);  
+    char* hostName = new char[strlen(_URL->host)+12];
+    if(strchr(_URL->host, ':')){
+        sprintf(hostName,"[%s]:%d", _URL->host, _URL->port);    // IPv6 literal (RFC 7230 Host syntax)
+    }
+    else {
+        sprintf(hostName,"%s:%d", _URL->host, _URL->port);
+    }
     _addHeader("host",hostName);
     delete[] hostName;
     _lastActivity = millis();
@@ -309,12 +314,29 @@ bool  asyncHTTPrequest::_parseURL(const char* url){
     *bufptr++ = 0;
 
         // host
+        // A bracketed IPv6 literal ([2001:db8::1]) is stored without the
+        // brackets: the colons inside would otherwise terminate the host
+        // scan at the first one. The bare literal is what the TCP client's
+        // resolver wants (ipaddr_aton accepts it directly).
 
     _URL->host = bufptr;
-    memcpy(bufptr, urlptr, seglen);
-    bufptr += seglen;
-    *bufptr++ = 0;
-    urlptr += seglen;
+    if(*urlptr == '['){
+        const char* closeBracket = strchr(urlptr, ']');
+        if( ! closeBracket){
+            return false;
+        }
+        seglen = closeBracket - urlptr - 1;
+        memcpy(bufptr, urlptr + 1, seglen);
+        bufptr += seglen;
+        *bufptr++ = 0;
+        urlptr = closeBracket + 1;
+    }
+    else {
+        memcpy(bufptr, urlptr, seglen);
+        bufptr += seglen;
+        *bufptr++ = 0;
+        urlptr += seglen;
+    }
 
         // port 
 
